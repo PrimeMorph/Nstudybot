@@ -3,13 +3,12 @@ from aiogram.fsm.state import State, StatesGroup
 
 class PhysicsStates(StatesGroup):
     """Состояния для навигации по физике"""
-    choosing_section = State()      # выбор раздела (механика, электричество...)
+    choosing_section = State()      # выбор раздела
     choosing_topic = State()        # выбор темы внутри раздела
-    viewing_formula = State()       # просмотр конкретной формулы
+    viewing_formula = State()       # просмотр формулы
     viewing_example = State()       # просмотр примера
     taking_test = State()           # прохождение теста
 
-# AdminStates — добавь в конец файла states.py
 class AdminStates(StatesGroup):
     """Состояния для админ-панели"""
     choosing_action = State()
