@@ -12,7 +12,7 @@ async def get_connection():
     return await asyncpg.connect(DATABASE_URL)
 
 async def get_sections() -> List[Dict]:
-    """Получить все разделы"""
+    """Получить все разделы (без description)"""
     conn = None
     try:
         conn = await get_connection()
@@ -123,7 +123,6 @@ async def get_examples(topic_id: int) -> List[Dict]:
     finally:
         if conn:
             await conn.close()
-
 
 async def add_user(user_id: int, username: str = None, first_name: str = None):
     """Добавить или обновить пользователя в БД"""
