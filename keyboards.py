@@ -41,3 +41,19 @@ def topics_keyboard(topics: list):
     builder.add(KeyboardButton(text="🔙 К разделам"))
     builder.adjust(1)
     return builder.as_markup(resize_keyboard=True)
+
+
+# admin_panel_menu — добавь в конец файла keyboards.py
+def admin_panel_menu():
+    from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+    from aiogram.utils.keyboard import ReplyKeyboardBuilder
+    
+    builder = ReplyKeyboardBuilder()
+    builder.add(KeyboardButton(text="📚 Добавить раздел"))
+    builder.add(KeyboardButton(text="📖 Добавить тему"))
+    builder.add(KeyboardButton(text="📐 Добавить формулу"))
+    builder.add(KeyboardButton(text="📝 Добавить пример"))
+    builder.add(KeyboardButton(text="📋 Список разделов"))
+    builder.add(KeyboardButton(text="◀️ Назад в главное меню"))
+    builder.adjust(1)
+    return builder.as_markup(resize_keyboard=True)
