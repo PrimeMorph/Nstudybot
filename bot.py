@@ -209,15 +209,28 @@ async def back_to_topics(callback: types.CallbackQuery, state: FSMContext):
     section_id = data.get('section_id')
     
     if section_id:
+        # Получаем темы раздела из БД
         topics = await db_content.get_topics(section_id)
         if topics:
+            # Сбрасываем состояние на выбор темы
             await state.set_state(PhysicsStates.choosing_topic)
+            
+            # Получаем название раздела для красоты
+            section = await db_content.get_section_by_id(section_id)
+            section_name = section['name'] if section else "Раздел"
+            
+            # Отправляем сообщение с клавиатурой тем
             await callback.message.answer(
-                "Выбери тему:",
+                f"📌 *{section_name}*\n\nВыбери тему:",
+                parse_mode="Markdown",
                 reply_markup=topics_keyboard(topics)
             )
+            # Удаляем старое сообщение с кнопками
+            await callback.message.delete()
+        else:
+            await callback.message.answer("❌ В этом разделе пока нет тем")
     else:
-        await callback.message.answer("Ошибка. Начни сначала.")
+        await callback.message.answer("❌ Ошибка. Начни сначала с /start")
         await state.clear()
     
     await callback.answer()
@@ -225,12 +238,20 @@ async def back_to_topics(callback: types.CallbackQuery, state: FSMContext):
 # Обработчик возврата к разделам
 @dp.message(F.text == "🔙 К разделам")
 async def back_to_sections(message: types.Message, state: FSMContext):
+    # Получаем все разделы из БД
     sections = await db_content.get_sections()
-    await state.set_state(PhysicsStates.choosing_section)
-    await message.answer(
-        "Выбери раздел физики:",
-        reply_markup=sections_menu(sections)
-    )
+    
+    if sections:
+        # Устанавливаем состояние выбора раздела
+        await state.set_state(PhysicsStates.choosing_section)
+        
+        # Отправляем сообщение с клавиатурой разделов
+        await message.answer(
+            "📚 Выбери раздел физики:",
+            reply_markup=sections_menu(sections)
+        )
+    else:
+        await message.answer("❌ Разделы временно недоступны")
 
 # Обработчик возврата в главное меню
 @dp.message(F.text == "🔙 Главное меню")
