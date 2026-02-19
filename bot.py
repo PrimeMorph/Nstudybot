@@ -3,14 +3,14 @@ import asyncio
 import logging
 import os
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import Command, StateFilter
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from dotenv import load_dotenv
 
-from keyboards import main_menu, sections_menu, topic_navigation
+from keyboards import main_menu, sections_menu, topics_keyboard, topic_navigation
 from states import PhysicsStates
-from physics_data import physics_content
+import db_content  # импортируем наш новый модуль
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -18,10 +18,17 @@ BOT_TOKEN = os.getenv('BOT_TOKEN')
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Инициализация бота и диспетчера
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
+
+# Функция для сброса вебхука
+async def on_startup():
+    logger.info("🔄 Сброс вебхука...")
+    await bot.delete_webhook(drop_pending_updates=True)
+    logger.info("✅ Вебхук удалён")
 
 # Команда /start
 @dp.message(Command("start"))
@@ -41,71 +48,85 @@ async def cmd_start(message: types.Message):
 # Обработчик кнопки "Разделы физики"
 @dp.message(F.text == "📚 Разделы физики")
 async def show_sections(message: types.Message, state: FSMContext):
+    # Получаем разделы из БД
+    sections = await db_content.get_sections()
+    
+    if not sections:
+        await message.answer("❌ Разделы временно недоступны")
+        return
+    
     await state.set_state(PhysicsStates.choosing_section)
     await message.answer(
         "Выбери раздел физики:",
-        reply_markup=sections_menu()
+        reply_markup=sections_menu(sections)
     )
 
 # Обработчик выбора раздела
-@dp.message(PhysicsStates.choosing_section, F.text.in_(["1️⃣ Механика", "2️⃣ Молекулярная физика", "3️⃣ Электричество", "4️⃣ Оптика"]))
+@dp.message(PhysicsStates.choosing_section)
 async def section_chosen(message: types.Message, state: FSMContext):
-    section_map = {
-        "1️⃣ Механика": "mechanics",
-        "2️⃣ Молекулярная физика": "molecular",
-        "3️⃣ Электричество": "electricity",
-        "4️⃣ Оптика": "optics"
-    }
+    text = message.text
     
-    section_key = section_map.get(message.text)
-    if section_key and section_key in physics_content:
-        await state.update_data(section=section_key)
-        await state.set_state(PhysicsStates.choosing_topic)
+    # Извлекаем название раздела (убираем эмодзи)
+    clean_name = text[2:].strip() if text[0].isdigit() and text[1] == '️' else text
+    
+    # Получаем все разделы
+    sections = await db_content.get_sections()
+    
+    # Ищем выбранный раздел
+    selected_section = None
+    for section in sections:
+        if section['name'] in clean_name:
+            selected_section = section
+            break
+    
+    if selected_section:
+        await state.update_data(section_id=selected_section['id'], section_key=selected_section['key'])
         
-        # Показываем темы выбранного раздела
-        section = physics_content[section_key]
-        topics_text = f"📌 *{section['name']}*\n\nДоступные темы:\n"
+        # Получаем темы раздела
+        topics = await db_content.get_topics(selected_section['id'])
         
-        # Создаем клавиатуру с темами
-        from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-        topics_keyboard = ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text=topic['name'])] for topic in section['topics'].values()] + 
-                     [[KeyboardButton(text="🔙 К разделам")]],
-            resize_keyboard=True
-        )
-        
-        await message.answer("Выбери тему:", reply_markup=topics_keyboard)
+        if topics:
+            await state.set_state(PhysicsStates.choosing_topic)
+            await message.answer(
+                f"📌 *{selected_section['name']}*\n\nВыбери тему:",
+                parse_mode="Markdown",
+                reply_markup=topics_keyboard(topics)
+            )
+        else:
+            await message.answer("В этом разделе пока нет тем")
+    else:
+        await message.answer("Раздел не найден. Попробуй ещё раз.")
 
 # Обработчик выбора темы
 @dp.message(PhysicsStates.choosing_topic)
 async def topic_chosen(message: types.Message, state: FSMContext):
     data = await state.get_data()
-    section_key = data.get('section')
+    section_id = data.get('section_id')
     
-    if not section_key or section_key not in physics_content:
+    if not section_id:
         await message.answer("Ошибка. Начни сначала.")
         await state.clear()
         return
     
-    section = physics_content[section_key]
+    # Получаем все темы раздела
+    topics = await db_content.get_topics(section_id)
     
     # Ищем выбранную тему
     selected_topic = None
-    topic_key = None
-    for key, topic in section['topics'].items():
-        if topic['name'].lower() in message.text.lower() or message.text.lower() in topic['name'].lower():
+    for topic in topics:
+        if topic['name'].lower() in message.text.lower():
             selected_topic = topic
-            topic_key = key
             break
     
     if selected_topic:
-        await state.update_data(topic=topic_key)
+        await state.update_data(topic_id=selected_topic['id'])
         
-        # Отправляем информацию о теме
-        text = f"*{selected_topic['name']}*\n\n"
-        text += f"📖 *Теория:*\n{selected_topic['theory']}\n\n"
-        
-        await message.answer(text, parse_mode="Markdown", reply_markup=topic_navigation())
+        # Отправляем теорию
+        await message.answer(
+            f"*{selected_topic['name']}*\n\n📖 *Теория:*\n{selected_topic['theory']}",
+            parse_mode="Markdown",
+            reply_markup=topic_navigation()
+        )
     else:
         await message.answer("Тема не найдена. Попробуй ещё раз.")
 
@@ -113,19 +134,23 @@ async def topic_chosen(message: types.Message, state: FSMContext):
 @dp.callback_query(F.data == "show_formulas")
 async def show_formulas(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    section_key = data.get('section')
-    topic_key = data.get('topic')
+    topic_id = data.get('topic_id')
     
-    if not section_key or not topic_key:
+    if not topic_id:
         await callback.message.answer("Ошибка. Начни сначала.")
         return
     
-    topic = physics_content[section_key]['topics'][topic_key]
+    formulas = await db_content.get_formulas(topic_id)
     
-    text = f"*{topic['name']}: формулы*\n\n"
-    for i, formula in enumerate(topic['formulas'], 1):
-        text += f"{i}. *{formula['formula']}*\n"
-        text += f"   _{formula['description']}_\n\n"
+    if not formulas:
+        await callback.message.answer("Формул пока нет.")
+        return
+    
+    text = "📐 *Формулы:*\n\n"
+    for i, f in enumerate(formulas, 1):
+        text += f"{i}. *{f['formula']}*\n"
+        if f['description']:
+            text += f"   _{f['description']}_\n\n"
     
     await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=topic_navigation())
     await callback.answer()
@@ -134,41 +159,45 @@ async def show_formulas(callback: types.CallbackQuery, state: FSMContext):
 @dp.callback_query(F.data == "show_theory")
 async def show_theory(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    section_key = data.get('section')
-    topic_key = data.get('topic')
+    topic_id = data.get('topic_id')
     
-    if not section_key or not topic_key:
+    if not topic_id:
         await callback.message.answer("Ошибка. Начни сначала.")
         return
     
-    topic = physics_content[section_key]['topics'][topic_key]
+    topic = await db_content.get_topic_by_id(topic_id)
     
-    text = f"*{topic['name']}: теория*\n\n{topic['theory']}"
+    if not topic:
+        await callback.message.answer("Теория не найдена.")
+        return
     
-    await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=topic_navigation())
+    await callback.message.edit_text(
+        f"*{topic['name']}*\n\n📖 *Теория:*\n{topic['theory']}",
+        parse_mode="Markdown",
+        reply_markup=topic_navigation()
+    )
     await callback.answer()
 
 # Обработчик кнопки "Примеры"
 @dp.callback_query(F.data == "show_examples")
 async def show_examples(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    section_key = data.get('section')
-    topic_key = data.get('topic')
+    topic_id = data.get('topic_id')
     
-    if not section_key or not topic_key:
+    if not topic_id:
         await callback.message.answer("Ошибка. Начни сначала.")
         return
     
-    topic = physics_content[section_key]['topics'][topic_key]
+    examples = await db_content.get_examples(topic_id)
     
-    if not topic.get('examples'):
+    if not examples:
         await callback.message.answer("Примеров пока нет.")
         return
     
-    text = f"*{topic['name']}: примеры*\n\n"
-    for i, example in enumerate(topic['examples'], 1):
-        text += f"*Задача {i}:* {example['question']}\n"
-        text += f"*Решение:* {example['answer']}\n\n"
+    text = "📝 *Примеры:*\n\n"
+    for i, ex in enumerate(examples, 1):
+        text += f"*Задача {i}:* {ex['question']}\n"
+        text += f"*Решение:* {ex['answer']}\n\n"
     
     await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=topic_navigation())
     await callback.answer()
@@ -177,20 +206,16 @@ async def show_examples(callback: types.CallbackQuery, state: FSMContext):
 @dp.callback_query(F.data == "back_to_topics")
 async def back_to_topics(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    section_key = data.get('section')
+    section_id = data.get('section_id')
     
-    if section_key and section_key in physics_content:
-        section = physics_content[section_key]
-        
-        from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-        topics_keyboard = ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text=topic['name'])] for topic in section['topics'].values()] + 
-                     [[KeyboardButton(text="🔙 К разделам")]],
-            resize_keyboard=True
-        )
-        
-        await callback.message.answer("Выбери тему:", reply_markup=topics_keyboard)
-        await state.set_state(PhysicsStates.choosing_topic)
+    if section_id:
+        topics = await db_content.get_topics(section_id)
+        if topics:
+            await state.set_state(PhysicsStates.choosing_topic)
+            await callback.message.answer(
+                "Выбери тему:",
+                reply_markup=topics_keyboard(topics)
+            )
     else:
         await callback.message.answer("Ошибка. Начни сначала.")
         await state.clear()
@@ -200,8 +225,12 @@ async def back_to_topics(callback: types.CallbackQuery, state: FSMContext):
 # Обработчик возврата к разделам
 @dp.message(F.text == "🔙 К разделам")
 async def back_to_sections(message: types.Message, state: FSMContext):
+    sections = await db_content.get_sections()
     await state.set_state(PhysicsStates.choosing_section)
-    await message.answer("Выбери раздел физики:", reply_markup=sections_menu())
+    await message.answer(
+        "Выбери раздел физики:",
+        reply_markup=sections_menu(sections)
+    )
 
 # Обработчик возврата в главное меню
 @dp.message(F.text == "🔙 Главное меню")
@@ -223,7 +252,11 @@ async def help(message: types.Message):
 
 # Запуск бота
 async def main():
-    await dp.start_polling(bot)
+    await on_startup()
+    try:
+        await dp.start_polling(bot)
+    finally:
+        await bot.session.close()
 
 if __name__ == "__main__":
     asyncio.run(main())
