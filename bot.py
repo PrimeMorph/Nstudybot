@@ -100,6 +100,16 @@ async def section_chosen(message: types.Message, state: FSMContext):
 # Обработчик выбора темы
 @dp.message(PhysicsStates.choosing_topic)
 async def topic_chosen(message: types.Message, state: FSMContext):
+    # Если нажали "🔙 К разделам" — выходим из обработчика
+    if message.text == "🔙 К разделам":
+        return  # Этот случай обработает другой хендлер
+    
+    # Если нажали "🔙 Главное меню"
+    if message.text == "🔙 Главное меню":
+        await state.clear()
+        await message.answer("Главное меню:", reply_markup=main_menu())
+        return
+    
     data = await state.get_data()
     section_id = data.get('section_id')
     
@@ -108,21 +118,16 @@ async def topic_chosen(message: types.Message, state: FSMContext):
         await state.clear()
         return
     
-    # Получаем все темы раздела из БД
+    # Получаем все темы раздела
     topics = await db_content.get_topics(section_id)
     
     if not topics:
         await message.answer("❌ В этом разделе пока нет тем")
         return
     
-    # Логируем для отладки
-    logger.info(f"Пользователь выбрал: '{message.text}'")
-    logger.info(f"Доступные темы: {[t['name'] for t in topics]}")
-    
     # Ищем выбранную тему
     selected_topic = None
     for topic in topics:
-        # Сравниваем без учёта регистра и лишних пробелов
         if topic['name'].strip().lower() == message.text.strip().lower():
             selected_topic = topic
             break
@@ -130,14 +135,13 @@ async def topic_chosen(message: types.Message, state: FSMContext):
     if selected_topic:
         await state.update_data(topic_id=selected_topic['id'])
         
-        # Отправляем теорию
         await message.answer(
             f"*{selected_topic['name']}*\n\n📖 *Теория:*\n{selected_topic['theory']}",
             parse_mode="Markdown",
             reply_markup=topic_navigation()
         )
     else:
-        # Если тема не найдена, показываем доступные темы
+        # Показываем доступные темы
         topics_list = "\n".join([f"• {t['name']}" for t in topics])
         await message.answer(
             f"❌ Тема не найдена.\n\nДоступные темы:\n{topics_list}\n\nПожалуйста, выбери тему из списка:",
@@ -223,27 +227,28 @@ async def back_to_topics(callback: types.CallbackQuery, state: FSMContext):
     section_id = data.get('section_id')
     
     if section_id:
-        # Получаем темы раздела из БД
+        # Получаем темы раздела
         topics = await db_content.get_topics(section_id)
         if topics:
+            # Устанавливаем состояние выбора темы
             await state.set_state(PhysicsStates.choosing_topic)
             
             # Получаем название раздела
             section = await db_content.get_section_by_id(section_id)
             section_name = section['name'] if section else "Раздел"
             
-            # Отправляем новое сообщение с клавиатурой
+            # Отправляем новое сообщение с темами
             await callback.message.answer(
                 f"📌 *{section_name}*\n\nВыбери тему:",
                 parse_mode="Markdown",
                 reply_markup=topics_keyboard(topics)
             )
-            # Удаляем старое сообщение
+            # Удаляем старое сообщение с инлайн-кнопками
             await callback.message.delete()
         else:
             await callback.message.answer("❌ В этом разделе пока нет тем")
     else:
-        await callback.message.answer("❌ Ошибка. Начни сначала с /start")
+        await callback.message.answer("❌ Ошибка. Начни сначала.", reply_markup=main_menu())
         await state.clear()
     
     await callback.answer()
@@ -251,20 +256,19 @@ async def back_to_topics(callback: types.CallbackQuery, state: FSMContext):
 # Обработчик возврата к разделам
 @dp.message(F.text == "🔙 К разделам")
 async def back_to_sections(message: types.Message, state: FSMContext):
+    # Очищаем состояние
+    await state.clear()
+    
     # Получаем все разделы из БД
     sections = await db_content.get_sections()
     
     if sections:
-        # Устанавливаем состояние выбора раздела
-        await state.set_state(PhysicsStates.choosing_section)
-        
-        # Отправляем сообщение с клавиатурой разделов
         await message.answer(
             "📚 Выбери раздел физики:",
             reply_markup=sections_menu(sections)
         )
     else:
-        await message.answer("❌ Разделы временно недоступны")
+        await message.answer("❌ Разделы временно недоступны", reply_markup=main_menu())
 
 # Обработчик возврата в главное меню
 @dp.message(F.text == "🔙 Главное меню")
