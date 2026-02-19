@@ -123,3 +123,22 @@ async def get_examples(topic_id: int) -> List[Dict]:
     finally:
         if conn:
             await conn.close()
+
+
+async def add_user(user_id: int, username: str = None, first_name: str = None):
+    """Добавить или обновить пользователя в БД"""
+    conn = None
+    try:
+        conn = await get_connection()
+        await conn.execute("""
+            INSERT INTO users (user_id, username, first_name, registered_date, last_active)
+            VALUES ($1, $2, $3, NOW(), NOW())
+            ON CONFLICT (user_id) DO UPDATE
+            SET username = $2, first_name = $3, last_active = NOW()
+        """, user_id, username, first_name)
+        logger.info(f"✅ Пользователь {user_id} добавлен/обновлён")
+    except Exception as e:
+        logger.error(f"Ошибка добавления пользователя {user_id}: {e}")
+    finally:
+        if conn:
+            await conn.close()
