@@ -12,6 +12,8 @@ from keyboards import main_menu, sections_menu, topics_keyboard, topic_navigatio
 from states import PhysicsStates
 import db_content  # импортируем наш модуль для работы с БД
 
+ADMIN_ID = 8561318974
+
 # Загрузка переменных окружения
 load_dotenv()
 BOT_TOKEN = os.getenv('BOT_TOKEN')
