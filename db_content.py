@@ -131,10 +131,10 @@ async def add_user(user_id: int, username: str = None, first_name: str = None):
     try:
         conn = await get_connection()
         await conn.execute("""
-            INSERT INTO users (user_id, username, first_name, registered_date, last_active)
-            VALUES ($1, $2, $3, NOW(), NOW())
+            INSERT INTO users (user_id, username, first_name, registered_date, last_active, language)
+            VALUES ($1, $2, $3, CURRENT_DATE, CURRENT_DATE, 'ru')
             ON CONFLICT (user_id) DO UPDATE
-            SET username = $2, first_name = $3, last_active = NOW()
+            SET username = $2, first_name = $3, last_active = CURRENT_DATE
         """, user_id, username, first_name)
         logger.info(f"✅ Пользователь {user_id} добавлен/обновлён")
     except Exception as e:
