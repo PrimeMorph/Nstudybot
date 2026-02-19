@@ -9,6 +9,7 @@ class PhysicsStates(StatesGroup):
     viewing_example = State()       # просмотр примера
     taking_test = State()           # прохождение теста
 
+# AdminStates — добавь в конец файла states.py
 class AdminStates(StatesGroup):
     """Состояния для админ-панели"""
     choosing_action = State()
