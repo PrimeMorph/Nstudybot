@@ -2,12 +2,19 @@
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
 
-# Главное меню
-def main_menu():
+# Главное меню (теперь с параметром is_admin)
+def main_menu(is_admin: bool = False):
     builder = ReplyKeyboardBuilder()
+    
+    # Основные кнопки для всех
     builder.add(KeyboardButton(text="📚 Разделы физики"))
     builder.add(KeyboardButton(text="🔍 Поиск по формуле"))
     builder.add(KeyboardButton(text="❓ Помощь"))
+    
+    # Админские кнопки (только для админа)
+    if is_admin:
+        builder.add(KeyboardButton(text="🔧 Админ панель"))
+    
     builder.adjust(1)
     return builder.as_markup(resize_keyboard=True)
 
@@ -42,12 +49,8 @@ def topics_keyboard(topics: list):
     builder.adjust(1)
     return builder.as_markup(resize_keyboard=True)
 
-
-# admin_panel_menu — добавь в конец файла keyboards.py
+# Админ-панель меню
 def admin_panel_menu():
-    from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-    from aiogram.utils.keyboard import ReplyKeyboardBuilder
-    
     builder = ReplyKeyboardBuilder()
     builder.add(KeyboardButton(text="📚 Добавить раздел"))
     builder.add(KeyboardButton(text="📖 Добавить тему"))
