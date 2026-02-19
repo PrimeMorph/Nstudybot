@@ -2,6 +2,7 @@
 import asyncio
 import logging
 import os
+import re
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -25,9 +26,9 @@ logger = logging.getLogger(__name__)
 # ═══════════════════════════════════════════════
 # 👑 ТВОЙ TELEGRAM ID (ЗАМЕНИ НА СВОЙ)
 # ═══════════════════════════════════════════════
-ADMIN_ID = 8561318974  # ← ВСТАВЬ СЮДА СВОЙ ID (узнай у @userinfobot)
+ADMIN_ID = 5091387786  # ← СЮДА ТВОЙ ID
 
-# Функция проверки админа (добавляем ПОСЛЕ ADMIN_ID)
+# Функция проверки админа
 def is_admin(user_id: int) -> bool:
     return user_id == ADMIN_ID
 
@@ -55,7 +56,6 @@ async def cmd_start(message: types.Message):
     user = message.from_user
     await db_content.add_user(user.id, user.username, user.first_name)
     
-    # Проверяем, админ ли это
     admin_status = is_admin(user.id)
     
     welcome_text = (
@@ -310,7 +310,7 @@ async def search_formula(message: types.Message):
     await message.answer("🔍 Функция поиска по формулам появится скоро!")
 
 # ═══════════════════════════════════════════════
-# 👑 АДМИН-ПАНЕЛЬ (только для ADMIN_ID)
+# 👑 АДМИН-ПАНЕЛЬ
 # ═══════════════════════════════════════════════
 
 @dp.message(F.text == "🔧 Админ панель")
@@ -334,6 +334,27 @@ async def back_to_main_from_admin(message: types.Message, state: FSMContext):
         reply_markup=main_menu(is_admin=is_admin(message.from_user.id))
     )
 
+# Словарь для транслитерации
+TRANSLIT_DICT = {
+    'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo',
+    'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm',
+    'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u',
+    'ф': 'f', 'х': 'h', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'sch',
+    'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya',
+    'А': 'A', 'Б': 'B', 'В': 'V', 'Г': 'G', 'Д': 'D', 'Е': 'E', 'Ё': 'Yo',
+    'Ж': 'Zh', 'З': 'Z', 'И': 'I', 'Й': 'Y', 'К': 'K', 'Л': 'L', 'М': 'M',
+    'Н': 'N', 'О': 'O', 'П': 'P', 'Р': 'R', 'С': 'S', 'Т': 'T', 'У': 'U',
+    'Ф': 'F', 'Х': 'H', 'Ц': 'Ts', 'Ч': 'Ch', 'Ш': 'Sh', 'Щ': 'Sch',
+    'Ъ': '', 'Ы': 'Y', 'Ь': '', 'Э': 'E', 'Ю': 'Yu', 'Я': 'Ya'
+}
+
+def transliterate(text: str) -> str:
+    """Транслитерация с русского на латиницу"""
+    result = ''
+    for char in text:
+        result += TRANSLIT_DICT.get(char, char)
+    return result
+
 # Добавление раздела
 @dp.message(AdminStates.choosing_action, F.text == "📚 Добавить раздел")
 async def add_section_start(message: types.Message, state: FSMContext):
@@ -347,7 +368,11 @@ async def add_section_start(message: types.Message, state: FSMContext):
 @dp.message(AdminStates.adding_section)
 async def add_section_process(message: types.Message, state: FSMContext):
     section_name = message.text.strip()
-    section_key = section_name.lower().replace(' ', '_')
+    
+    # Транслитерация
+    latin_name = transliterate(section_name)
+    # Заменяем пробелы на _, убираем всё кроме букв и цифр
+    section_key = re.sub(r'[^a-zA-Z0-9_]', '', latin_name.replace(' ', '_')).lower()
     
     conn = await get_connection()
     try:
@@ -355,7 +380,7 @@ async def add_section_process(message: types.Message, state: FSMContext):
             "INSERT INTO sections (key, name) VALUES ($1, $2)",
             section_key, section_name
         )
-        await message.answer(f"✅ Раздел '{section_name}' добавлен!")
+        await message.answer(f"✅ Раздел '{section_name}' добавлен!\n🔑 Ключ: {section_key}")
     except Exception as e:
         await message.answer(f"❌ Ошибка: {e}")
     finally:
@@ -409,7 +434,9 @@ async def add_topic_theory(message: types.Message, state: FSMContext):
     theory = message.text.strip()
     data = await state.get_data()
     
-    topic_key = data['topic_name'].lower().replace(' ', '_')
+    # Генерируем ключ темы
+    latin_name = transliterate(data['topic_name'])
+    topic_key = re.sub(r'[^a-zA-Z0-9_]', '', latin_name.replace(' ', '_')).lower()
     
     conn = await get_connection()
     try:
