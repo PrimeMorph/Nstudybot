@@ -39,6 +39,23 @@ async def get_section_by_key(key: str) -> Optional[Dict]:
         if conn:
             await conn.close()
 
+async def get_section_by_id(section_id: int) -> Optional[Dict]:
+    """Получить раздел по ID"""
+    conn = None
+    try:
+        conn = await get_connection()
+        row = await conn.fetchrow(
+            "SELECT id, key, name FROM sections WHERE id = $1",
+            section_id
+        )
+        return dict(row) if row else None
+    except Exception as e:
+        logger.error(f"Ошибка получения раздела {section_id}: {e}")
+        return None
+    finally:
+        if conn:
+            await conn.close()
+
 async def get_topics(section_id: int) -> List[Dict]:
     """Получить темы раздела"""
     conn = None
