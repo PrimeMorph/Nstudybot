@@ -108,13 +108,22 @@ async def topic_chosen(message: types.Message, state: FSMContext):
         await state.clear()
         return
     
-    # Получаем все темы раздела
+    # Получаем все темы раздела из БД
     topics = await db_content.get_topics(section_id)
+    
+    if not topics:
+        await message.answer("❌ В этом разделе пока нет тем")
+        return
+    
+    # Логируем для отладки
+    logger.info(f"Пользователь выбрал: '{message.text}'")
+    logger.info(f"Доступные темы: {[t['name'] for t in topics]}")
     
     # Ищем выбранную тему
     selected_topic = None
     for topic in topics:
-        if topic['name'].lower() in message.text.lower():
+        # Сравниваем без учёта регистра и лишних пробелов
+        if topic['name'].strip().lower() == message.text.strip().lower():
             selected_topic = topic
             break
     
@@ -128,7 +137,12 @@ async def topic_chosen(message: types.Message, state: FSMContext):
             reply_markup=topic_navigation()
         )
     else:
-        await message.answer("Тема не найдена. Попробуй ещё раз.")
+        # Если тема не найдена, показываем доступные темы
+        topics_list = "\n".join([f"• {t['name']}" for t in topics])
+        await message.answer(
+            f"❌ Тема не найдена.\n\nДоступные темы:\n{topics_list}\n\nПожалуйста, выбери тему из списка:",
+            reply_markup=topics_keyboard(topics)
+        )
 
 # Обработчик кнопки "Формулы"
 @dp.callback_query(F.data == "show_formulas")
@@ -212,20 +226,19 @@ async def back_to_topics(callback: types.CallbackQuery, state: FSMContext):
         # Получаем темы раздела из БД
         topics = await db_content.get_topics(section_id)
         if topics:
-            # Сбрасываем состояние на выбор темы
             await state.set_state(PhysicsStates.choosing_topic)
             
-            # Получаем название раздела для красоты
+            # Получаем название раздела
             section = await db_content.get_section_by_id(section_id)
             section_name = section['name'] if section else "Раздел"
             
-            # Отправляем сообщение с клавиатурой тем
+            # Отправляем новое сообщение с клавиатурой
             await callback.message.answer(
                 f"📌 *{section_name}*\n\nВыбери тему:",
                 parse_mode="Markdown",
                 reply_markup=topics_keyboard(topics)
             )
-            # Удаляем старое сообщение с кнопками
+            # Удаляем старое сообщение
             await callback.message.delete()
         else:
             await callback.message.answer("❌ В этом разделе пока нет тем")
