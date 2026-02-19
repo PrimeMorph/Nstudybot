@@ -1,46 +1,108 @@
 # db_content.py
 import asyncpg
 import os
+import logging
 from typing import Dict, List, Any, Optional
 
 DATABASE_URL = os.getenv('DATABASE_URL')
+logger = logging.getLogger(__name__)
+
+async def get_connection():
+    """Получить соединение с БД"""
+    return await asyncpg.connect(DATABASE_URL)
 
 async def get_sections() -> List[Dict]:
     """Получить все разделы"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    rows = await conn.fetch("SELECT id, key, name FROM sections ORDER BY id")
-    await conn.close()
-    return [dict(row) for row in rows]
+    conn = None
+    try:
+        conn = await get_connection()
+        rows = await conn.fetch("SELECT id, key, name FROM sections ORDER BY id")
+        return [dict(row) for row in rows]
+    except Exception as e:
+        logger.error(f"Ошибка получения разделов: {e}")
+        return []
+    finally:
+        if conn:
+            await conn.close()
 
-async def get_topics(section_key: str) -> List[Dict]:
+async def get_section_by_key(key: str) -> Optional[Dict]:
+    """Получить раздел по ключу"""
+    conn = None
+    try:
+        conn = await get_connection()
+        row = await conn.fetchrow("SELECT id, key, name FROM sections WHERE key = $1", key)
+        return dict(row) if row else None
+    except Exception as e:
+        logger.error(f"Ошибка получения раздела {key}: {e}")
+        return None
+    finally:
+        if conn:
+            await conn.close()
+
+async def get_topics(section_id: int) -> List[Dict]:
     """Получить темы раздела"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    rows = await conn.fetch("""
-        SELECT t.id, t.key, t.name, t.theory
-        FROM topics t
-        JOIN sections s ON t.section_id = s.id
-        WHERE s.key = $1
-        ORDER BY t.id
-    """, section_key)
-    await conn.close()
-    return [dict(row) for row in rows]
+    conn = None
+    try:
+        conn = await get_connection()
+        rows = await conn.fetch(
+            "SELECT id, key, name, theory FROM topics WHERE section_id = $1 ORDER BY id",
+            section_id
+        )
+        return [dict(row) for row in rows]
+    except Exception as e:
+        logger.error(f"Ошибка получения тем: {e}")
+        return []
+    finally:
+        if conn:
+            await conn.close()
+
+async def get_topic_by_id(topic_id: int) -> Optional[Dict]:
+    """Получить тему по ID"""
+    conn = None
+    try:
+        conn = await get_connection()
+        row = await conn.fetchrow(
+            "SELECT id, key, name, theory, section_id FROM topics WHERE id = $1",
+            topic_id
+        )
+        return dict(row) if row else None
+    except Exception as e:
+        logger.error(f"Ошибка получения темы {topic_id}: {e}")
+        return None
+    finally:
+        if conn:
+            await conn.close()
 
 async def get_formulas(topic_id: int) -> List[Dict]:
     """Получить формулы темы"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    rows = await conn.fetch(
-        "SELECT name, formula, description FROM formulas WHERE topic_id = $1",
-        topic_id
-    )
-    await conn.close()
-    return [dict(row) for row in rows]
+    conn = None
+    try:
+        conn = await get_connection()
+        rows = await conn.fetch(
+            "SELECT id, name, formula, description FROM formulas WHERE topic_id = $1 ORDER BY id",
+            topic_id
+        )
+        return [dict(row) for row in rows]
+    except Exception as e:
+        logger.error(f"Ошибка получения формул: {e}")
+        return []
+    finally:
+        if conn:
+            await conn.close()
 
 async def get_examples(topic_id: int) -> List[Dict]:
     """Получить примеры темы"""
-    conn = await asyncpg.connect(DATABASE_URL)
-    rows = await conn.fetch(
-        "SELECT question, answer FROM examples WHERE topic_id = $1",
-        topic_id
-    )
-    await conn.close()
-    return [dict(row) for row in rows]
+    conn = None
+    try:
+        conn = await get_connection()
+        rows = await conn.fetch(
+            "SELECT id, question, answer FROM examples WHERE topic_id = $1 ORDER BY id",
+            topic_id
+        )
+        return [dict(row) for row in rows]
+    except Exception as e:
+        logger.error(f"Ошибка получения примеров: {e}")
+        return []
+    finally:
+        if conn:
+            await conn.close()
