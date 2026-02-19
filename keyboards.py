@@ -11,13 +11,13 @@ def main_menu():
     builder.adjust(1)
     return builder.as_markup(resize_keyboard=True)
 
-# Меню разделов физики
-def sections_menu():
+# Меню разделов (динамическое)
+def sections_menu(sections: list):
     builder = ReplyKeyboardBuilder()
-    builder.add(KeyboardButton(text="1️⃣ Механика"))
-    builder.add(KeyboardButton(text="2️⃣ Молекулярная физика"))
-    builder.add(KeyboardButton(text="3️⃣ Электричество"))
-    builder.add(KeyboardButton(text="4️⃣ Оптика"))
+    for section in sections:
+        # Добавляем эмодзи в зависимости от названия
+        emoji = "1️⃣" if "Механика" in section['name'] else "2️⃣" if "Молекулярная" in section['name'] else "3️⃣" if "Электричество" in section['name'] else "4️⃣"
+        builder.add(KeyboardButton(text=f"{emoji} {section['name']}"))
     builder.add(KeyboardButton(text="🔙 Главное меню"))
     builder.adjust(1)
     return builder.as_markup(resize_keyboard=True)
@@ -32,3 +32,12 @@ def topic_navigation():
     builder.add(InlineKeyboardButton(text="🔙 К темам", callback_data="back_to_topics"))
     builder.adjust(2)
     return builder.as_markup()
+
+# Клавиатура для списка тем
+def topics_keyboard(topics: list):
+    builder = ReplyKeyboardBuilder()
+    for topic in topics:
+        builder.add(KeyboardButton(text=topic['name']))
+    builder.add(KeyboardButton(text="🔙 К разделам"))
+    builder.adjust(1)
+    return builder.as_markup(resize_keyboard=True)
